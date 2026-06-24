@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_PORT: ${BACKEND_PORT}
+    container_name: ai_blog_backend_prod
+    env_file:
+      - ./backend/.env
+    environment:
+      - PORT=${BACKEND_PORT}
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        FRONTEND_PORT: ${FRONTEND_PORT}
+        NEXT_PUBLIC_SITE_URL: ${COMPOSE_NEXT_PUBLIC_SITE_URL}
+        NEXT_PUBLIC_API_URL: ${COMPOSE_NEXT_PUBLIC_API_URL}
+    container_name: ai_blog_frontend_prod
+    env_file:
+      - ./frontend/.env
+    environment:
+      - PORT=${FRONTEND_PORT}
+      - INTERNAL_API_URL=http://backend:${BACKEND_PORT}
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+    restart: unless-stopped
