@@ -4,6 +4,7 @@ import express from "express";
 import { config } from "./config";
 import articlesRouter from "./routes/articles";
 import generateRouter from "./routes/generate";
+import newsletterRouter from "./routes/newsletter";
 import { startAutoPublishScheduler } from "./lib/scheduler";
 
 const app = express();
@@ -27,6 +28,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/articles", articlesRouter);
 app.use("/api/generate", generateRouter);
+app.use("/api/newsletter", newsletterRouter);
 
 app.listen(config.port, () => {
   console.log(`Backend API started on port ${config.port}`);

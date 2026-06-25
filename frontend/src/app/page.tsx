@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArticleCard } from "@/components/ArticleCard";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { getArticles } from "@/lib/api";
 
 export default async function HomePage() {
@@ -22,6 +23,10 @@ export default async function HomePage() {
               <Link href="/articles" className="btn primary">
                 Enter The Archive
               </Link>
+            </div>
+            <div className="newsletter-block">
+              <p className="newsletter-kicker">Weekly money signal</p>
+              <NewsletterSignup />
             </div>
             <div className="hero-tags">
               <span>Side Hustles</span>

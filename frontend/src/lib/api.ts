@@ -57,3 +57,18 @@ export async function getAllArticlesForStatic(): Promise<Article[]> {
     return [];
   }
 }
+
+export async function sendNewsletterSignup(email: string): Promise<void> {
+  const response = await fetch(`${resolveApiUrl()}/api/newsletter`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email })
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? "Failed to send email");
+  }
+}
