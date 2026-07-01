@@ -1,41 +1,51 @@
-import path from "node:path";
-import cors from "cors";
-import express from "express";
-import { config } from "./config";
-import articlesRouter from "./routes/articles";
-import generateRouter from "./routes/generate";
-import newsletterRouter from "./routes/newsletter";
-import { startAutoPublishScheduler } from "./lib/scheduler";
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { ensureSchema } from './services/db';
+import { migrateLegacyDataIfNeeded } from './services/legacyDataMigration';
+import { errorHandler } from './middleware/errorHandler';
+import { postsRouter } from './routes/posts';
+import { subscribersRouter } from './routes/subscribers';
+import { authRouter } from './routes/auth';
+import { adminRouter } from './routes/admin';
+import { aiRouter } from './routes/ai';
+import { healthIndexRouter } from './routes/healthIndex';
+import { startGenerationScheduler } from './services/generationScheduler';
 
 const app = express();
+const port = Number(process.env.PORT || 4000);
+const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
+app.use(helmet());
 app.use(
   cors({
-    origin: config.corsOrigin
-  })
+    origin: corsOrigin,
+    credentials: true,
+  }),
 );
-app.use(express.json({ limit: "1mb" }));
-app.use(
-  "/media",
-  express.static(path.resolve(process.cwd(), config.mediaDir), {
-    fallthrough: false
-  })
-);
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', service: 'makemoneyordie-backend', time: new Date().toISOString() });
 });
+app.use('/api/posts', postsRouter);
+app.use('/api/subscribe', subscribersRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/ai', aiRouter);
+app.use('/api/health-index', healthIndexRouter);
+app.use(errorHandler);
 
-app.use("/api/articles", articlesRouter);
-app.use("/api/generate", generateRouter);
-app.use("/api/newsletter", newsletterRouter);
+async function main() {
+  await ensureSchema();
+  await migrateLegacyDataIfNeeded();
+  startGenerationScheduler();
+  app.listen(port, () => console.log(`API listening on http://localhost:${port}`));
+}
 
-app.listen(config.port, () => {
-  console.log(`Backend API started on port ${config.port}`);
-  if (config.autoPostEnabled) {
-    startAutoPublishScheduler();
-    console.log(
-      `[scheduler] Enabled with ${config.autoPostCron} in timezone ${config.autoPostTimezone}`
-    );
-  }
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
 });

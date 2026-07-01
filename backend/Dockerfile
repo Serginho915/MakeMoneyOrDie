@@ -1,23 +1,28 @@
-FROM node:20-alpine AS deps
+FROM node:20-alpine AS base
+
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+FROM base AS dev
+
+ENV NODE_ENV=development
+COPY . .
+EXPOSE 4000
+CMD ["npm", "run", "dev"]
+
+FROM base AS build
+
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:20-alpine AS prod
+
 WORKDIR /app
-ARG BACKEND_PORT
 ENV NODE_ENV=production
-ENV PORT=${BACKEND_PORT}
 COPY package*.json ./
-RUN npm install --omit=dev
-COPY --from=builder /app/dist ./dist
-COPY data ./data
-COPY media ./media
-EXPOSE ${BACKEND_PORT}
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+COPY scripts ./scripts
+EXPOSE 4000
 CMD ["npm", "run", "start"]

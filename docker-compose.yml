@@ -1,47 +1,90 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: makemoneyordie
+      POSTGRES_USER: makemoneyordie
+      POSTGRES_PASSWORD: makemoneyordie
+    volumes:
+      - makemoneyordie_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U makemoneyordie -d makemoneyordie"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   backend:
+    image: makemoneyordie-backend-dev
     build:
       context: ./backend
-      dockerfile: Dockerfile
-      args:
-        BACKEND_PORT: ${BACKEND_PORT}
-    container_name: ai_blog_backend_dev
-    command: sh -c "npm install --include=dev && npm run dev"
-    env_file:
-      - ./backend/.env
-    environment:
-      - NODE_ENV=development
-      - PORT=${BACKEND_PORT}
+      target: dev
     ports:
-      - "${BACKEND_PORT}:${BACKEND_PORT}"
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
+      - "4000:4000"
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://makemoneyordie:makemoneyordie@postgres:5432/makemoneyordie
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: http://localhost:3000
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.1-8b-instruct}
+      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-http://localhost:3000}
+      OPENROUTER_TIMEOUT_MS: ${OPENROUTER_TIMEOUT_MS:-90000}
+      OPENROUTER_MAX_INPUT_CHARS: ${OPENROUTER_MAX_INPUT_CHARS:-16000}
+      OPENROUTER_MAX_OUTPUT_TOKENS: ${OPENROUTER_MAX_OUTPUT_TOKENS:-9000}
+      OPENROUTER_TEMPERATURE: ${OPENROUTER_TEMPERATURE:-0.7}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   frontend:
+    image: makemoneyordie-frontend-dev
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        FRONTEND_PORT: ${FRONTEND_PORT}
-        NEXT_PUBLIC_SITE_URL: ${COMPOSE_NEXT_PUBLIC_SITE_URL}
-        NEXT_PUBLIC_API_URL: ${COMPOSE_NEXT_PUBLIC_API_URL}
-    container_name: ai_blog_frontend_dev
-    command: sh -c "if [ ! -d node_modules/next ]; then npm install --include=dev; fi && npm run dev -- --hostname 0.0.0.0 --port ${FRONTEND_PORT}"
-    env_file:
-      - ./frontend/.env
-    environment:
-      - NODE_ENV=development
-      - PORT=${FRONTEND_PORT}
-      - INTERNAL_API_URL=http://backend:${BACKEND_PORT}
-    depends_on:
-      - backend
+      target: dev
     ports:
-      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - frontend_next_cache:/app/.next
+      - "3000:3000"
+    env_file:
+      - path: frontend/.env
+        required: false
+    environment:
+      VITE_API_URL: http://localhost:4000
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  admin-seed:
+    image: makemoneyordie-backend-dev
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgres://makemoneyordie:makemoneyordie@postgres:5432/makemoneyordie
+      LOCAL_SUPERADMIN_EMAIL: ${LOCAL_SUPERADMIN_EMAIL:-admin@makemoneyordie.local}
+      LOCAL_SUPERADMIN_PASSWORD: ${LOCAL_SUPERADMIN_PASSWORD:-MySecretPassword123!}
+    command: npm run create-superadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: "no"
 
 volumes:
-  frontend_next_cache:
+  makemoneyordie_postgres_data:

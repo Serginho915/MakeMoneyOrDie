@@ -1,27 +1,29 @@
-FROM node:20-alpine AS deps
+FROM node:20-alpine AS base
+
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
-FROM node:20-alpine AS builder
-WORKDIR /app
-ARG NEXT_PUBLIC_SITE_URL
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-COPY --from=deps /app/node_modules ./node_modules
+FROM base AS dev
+
+ENV NODE_ENV=development
+COPY . .
+EXPOSE 3000
+CMD ["npm", "run", "dev"]
+
+FROM base AS build
+
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:20-alpine AS prod
+
 WORKDIR /app
-ARG FRONTEND_PORT
 ENV NODE_ENV=production
-ENV PORT=${FRONTEND_PORT}
 COPY package*.json ./
-RUN npm install --omit=dev
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.mjs ./next.config.mjs
-EXPOSE ${FRONTEND_PORT}
-CMD ["sh", "-c", "npm run start -- --port $PORT"]
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+EXPOSE 3000
+CMD ["npm", "run", "start"]
