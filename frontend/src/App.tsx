@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Clock, Eye, FilePlus, RefreshCw, Save, Search, Trash2, Wand2 } from 'lucide-react';
 import { getPost, getPosts, request, subscribe } from './api';
 import type { AdminSettings, Article, Post } from './domain';
@@ -359,6 +360,7 @@ function AboutPage() {
 }
 
 function AdminPanel() {
+  const editorPanelRef = useRef<HTMLFormElement | null>(null);
   const [email, setEmail] = useState('admin@makemoneyordie.local');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
@@ -370,6 +372,24 @@ function AdminPanel() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [generatingCount, setGeneratingCount] = useState<1 | 3 | null>(null);
+  const [editorPanelHeight, setEditorPanelHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const element = editorPanelRef.current;
+    if (!element) return;
+
+    const updateHeight = () => setEditorPanelHeight(element.getBoundingClientRect().height);
+    updateHeight();
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, [token]);
 
   async function load(nextToken = token) {
     const [loadedPosts, loadedSettings] = await Promise.all([
@@ -514,7 +534,7 @@ function AdminPanel() {
       </header>
       {message && <p className="form-message">{message}</p>}
       <section className="admin-grid">
-        <form className="editor-panel" onSubmit={savePost}>
+        <form ref={editorPanelRef} className="editor-panel" onSubmit={savePost}>
           <h2>{editingSlug ? 'Edit article' : 'Create article'}</h2>
           <label><span>Title</span><input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required /></label>
           <label><span>Slug</span><input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} /></label>
@@ -523,7 +543,10 @@ function AdminPanel() {
           <label><span>Tags</span><input value={draft.tags} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} placeholder="affiliate marketing, AI side hustles" /></label>
           <button disabled={busy}><Save size={16} /> Save article</button>
         </form>
-        <section className="admin-list">
+        <section
+          className="admin-list"
+          style={editorPanelHeight ? ({ '--editor-panel-height': `${editorPanelHeight}px` } as CSSProperties) : undefined}
+        >
           <h2>Articles</h2>
           <div className="admin-list-scroll">
             {posts.map((post) => (
