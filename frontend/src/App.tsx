@@ -525,16 +525,18 @@ function AdminPanel() {
         </form>
         <section className="admin-list">
           <h2>Articles</h2>
-          {posts.map((post) => (
-            <article key={post.id}>
-              <div><strong>{post.title}</strong><small>{post.slug}</small></div>
-              <button onClick={() => {
-                setEditingSlug(post.slug);
-                setDraft({ title: post.title, slug: post.slug, excerpt: post.excerpt, contentHtml: post.contentHtml, status: post.status, tags: post.tags.join(', ') });
-              }}><FilePlus size={16} /> Edit</button>
-              <button onClick={() => removePost(post.slug)}><Trash2 size={16} /> Delete</button>
-            </article>
-          ))}
+          <div className="admin-list-scroll">
+            {posts.map((post) => (
+              <article key={post.id}>
+                <div><strong>{post.title}</strong><small>{post.slug}</small></div>
+                <button onClick={() => {
+                  setEditingSlug(post.slug);
+                  setDraft({ title: post.title, slug: post.slug, excerpt: post.excerpt, contentHtml: post.contentHtml, status: post.status, tags: post.tags.join(', ') });
+                }}><FilePlus size={16} /> Edit</button>
+                <button onClick={() => removePost(post.slug)}><Trash2 size={16} /> Delete</button>
+              </article>
+            ))}
+          </div>
         </section>
       </section>
       {settings && (
