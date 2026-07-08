@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Clock, Eye, FilePlus, RefreshCw, Save, Search, Trash2, Wand2 } from 'lucide-react';
+import { Clock, Eye, FilePlus, Menu, RefreshCw, Save, Search, Trash2, Wand2, X } from 'lucide-react';
 import { getPost, getPosts, request, subscribe } from './api';
 import type { AdminSettings, Article, Post } from './domain';
 
@@ -136,15 +136,33 @@ function ShareBar({ title, url }: { title: string; url: string }) {
 
 
 function Header() {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function go(path: string) {
+    setMenuOpen(false);
+    navigate(path);
+  }
+
   return (
-    <header className="site-header">
+    <header className={`site-header${menuOpen ? ' menu-open' : ''}`}>
       <div className="shell header-inner">
-        <button className="brand" onClick={() => navigate('/')}>MakeMoneyOrDie</button>
-        <nav className="nav">
-          <button onClick={() => navigate('/articles')}>Articles</button>
-          <button onClick={() => navigate('/about')}>About</button>
+        <button className="brand" onClick={() => go('/')}>MakeMoneyOrDie</button>
+        <button
+          className="menu-toggle"
+          type="button"
+          aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={menuOpen}
+          aria-controls="site-navigation"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+        <nav id="site-navigation" className="nav">
+          <button onClick={() => go('/articles')}>Articles</button>
+          <button onClick={() => go('/about')}>About</button>
         </nav>
       </div>
+      {menuOpen && <button className="menu-backdrop" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
     </header>
   );
 }
