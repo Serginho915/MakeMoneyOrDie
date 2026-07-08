@@ -11,25 +11,60 @@ function stripCodeFence(raw: string) {
   return raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
 }
 
+function balancedSlice(input: string, open: string, close: string) {
+  const start = input.indexOf(open);
+  if (start < 0) return '';
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === open) depth += 1;
+    if (char === close) depth -= 1;
+    if (depth === 0) return input.slice(start, index + 1);
+  }
+
+  return '';
+}
+
 function parseJsonResponse(raw: string) {
   const cleaned = stripCodeFence(raw);
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const objectStart = cleaned.indexOf('{');
-    const objectEnd = cleaned.lastIndexOf('}');
-    if (objectStart >= 0 && objectEnd > objectStart) {
-      return JSON.parse(cleaned.slice(objectStart, objectEnd + 1));
-    }
+  const candidates = [
+    cleaned,
+    balancedSlice(cleaned, '{', '}'),
+    balancedSlice(cleaned, '[', ']'),
+  ].filter(Boolean);
 
-    const arrayStart = cleaned.indexOf('[');
-    const arrayEnd = cleaned.lastIndexOf(']');
-    if (arrayStart >= 0 && arrayEnd > arrayStart) {
-      return JSON.parse(cleaned.slice(arrayStart, arrayEnd + 1));
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
     }
-
-    throw new Error('OpenRouter returned non-JSON content. Try again or use a model that supports JSON output.');
   }
+
+  throw new Error(`OpenRouter returned invalid JSON: ${lastError instanceof Error ? lastError.message : 'unknown parse error'}`);
 }
 
 function normalizeArticle(input: any, index: number): PostInput {
@@ -72,35 +107,49 @@ export async function generateArticlesWithOpenRouter(count = 3): Promise<PostInp
   }
 
   const prompt = settings.masterPrompt.slice(0, numberEnv('OPENROUTER_MAX_INPUT_CHARS', 8000));
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.OPENROUTER_SITE_URL || process.env.SITE_URL || 'http://localhost:3000',
-      'X-Title': 'MakeMoneyOrDie',
-    },
-    signal: AbortSignal.timeout(numberEnv('OPENROUTER_TIMEOUT_MS', 45000)),
-    body: JSON.stringify({
-      model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct',
-      max_tokens: numberEnv('OPENROUTER_MAX_OUTPUT_TOKENS', 9000),
-      temperature: numberEnv('OPENROUTER_TEMPERATURE', 0.7),
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content:
-            `Return JSON only, with no prose before or after it. Shape: {"articles":[{"title":"...","slug":"...","seoTitle":"...","metaDescription":"...","primaryKeyword":"...","secondaryKeywords":["..."],"excerpt":"...","tags":["..."],"contentHtml":"..."}]}. Generate exactly ${articleCount} article${articleCount === 1 ? '' : 's'}. contentHtml must be full article HTML only, no markdown tables, no images, no financial guarantees.`,
-        },
-        { role: 'user', content: `${prompt}\n\nIMPORTANT: Generate exactly ${articleCount} article${articleCount === 1 ? '' : 's'} for this request. Your entire response must be valid JSON only. Do not write "Here are", explanations, markdown, or code fences.` },
-      ],
-    }),
-  });
+  const attempts = Math.max(1, numberEnv('OPENROUTER_RETRY_ATTEMPTS', 3));
+  let lastError: unknown;
 
-  if (!response.ok) throw new Error(`OpenRouter request failed: ${response.status}`);
-  const data = await response.json();
-  const raw = data.choices?.[0]?.message?.content || '{}';
-  const parsed = parseJsonResponse(raw);
-  const articles: unknown[] = Array.isArray(parsed) ? parsed : Array.isArray(parsed.articles) ? parsed.articles : [parsed];
-  return articles.slice(0, articleCount).map(normalizeArticle).filter((article: PostInput) => article.contentHtml);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.OPENROUTER_SITE_URL || process.env.SITE_URL || 'http://localhost:3000',
+          'X-Title': 'MakeMoneyOrDie',
+        },
+        signal: AbortSignal.timeout(numberEnv('OPENROUTER_TIMEOUT_MS', 45000)),
+        body: JSON.stringify({
+          model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct',
+          max_tokens: numberEnv('OPENROUTER_MAX_OUTPUT_TOKENS', 9000),
+          temperature: numberEnv('OPENROUTER_TEMPERATURE', 0.7),
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content:
+                `Return JSON only, with no prose before or after it. Shape: {"articles":[{"title":"...","slug":"...","seoTitle":"...","metaDescription":"...","primaryKeyword":"...","secondaryKeywords":["..."],"excerpt":"...","tags":["..."],"contentHtml":"..."}]}. Generate exactly ${articleCount} article${articleCount === 1 ? '' : 's'}. contentHtml must be full article HTML only, no markdown tables, no images, no financial guarantees.`,
+            },
+            { role: 'user', content: `${prompt}\n\nIMPORTANT: Generate exactly ${articleCount} article${articleCount === 1 ? '' : 's'} for this request. Your entire response must be valid JSON only. Do not write "Here are", explanations, markdown, or code fences.` },
+          ],
+        }),
+      });
+
+      if (!response.ok) throw new Error(`OpenRouter request failed: ${response.status}`);
+      const data = await response.json();
+      const raw = data.choices?.[0]?.message?.content || '{}';
+      const parsed = parseJsonResponse(raw);
+      const articles: unknown[] = Array.isArray(parsed) ? parsed : Array.isArray(parsed.articles) ? parsed.articles : [parsed];
+      const normalized = articles.slice(0, articleCount).map(normalizeArticle).filter((article: PostInput) => article.contentHtml);
+      if (normalized.length > 0) return normalized;
+      throw new Error('OpenRouter returned JSON without article contentHtml.');
+    } catch (error) {
+      lastError = error;
+      console.error(`OpenRouter generation attempt ${attempt}/${attempts} failed`, error);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('OpenRouter generation failed.');
 }

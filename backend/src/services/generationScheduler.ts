@@ -32,7 +32,7 @@ export function startGenerationScheduler() {
       const key = `${now.toISOString().slice(0, 10)}-${hhmm}`;
       if (shouldRunToday && times.includes(hhmm) && key !== lastRunKey) {
         lastRunKey = key;
-        await generateAndStoreArticles();
+        await generateAndStoreArticles(undefined, 1);
       }
     } catch (error) {
       console.error('Generation scheduler failed', error);
