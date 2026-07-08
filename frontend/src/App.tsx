@@ -14,6 +14,8 @@ const weekdays = [
   { value: 6, label: 'Sat' },
   { value: 0, label: 'Sun' },
 ];
+const hourOptions = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
+const minuteOptions = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
 
 type DraftPost = {
   title: string;
@@ -25,6 +27,30 @@ type DraftPost = {
 };
 
 const emptyDraft: DraftPost = { title: '', slug: '', excerpt: '', contentHtml: '<h2>Introduction</h2><p></p>', status: 'published', tags: '' };
+
+function normalizeTimeValue(value: string) {
+  const trimmed = String(value || '').trim();
+  return /^\d{2}:\d{2}$/.test(trimmed) ? trimmed : '08:00';
+}
+
+function TimePicker({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const [hour, minute] = normalizeTimeValue(value).split(':');
+
+  return (
+    <label className="time-field">
+      <span>{label}</span>
+      <div className="time-picker">
+        <select aria-label={`${label} hour`} value={hour} onChange={(event) => onChange(`${event.target.value}:${minute}`)}>
+          {hourOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+        <span className="time-separator">:</span>
+        <select aria-label={`${label} minute`} value={minute} onChange={(event) => onChange(`${hour}:${event.target.value}`)}>
+          {minuteOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </div>
+    </label>
+  );
+}
 
 function pickCover(seed: string) {
   let hash = 0;
@@ -499,7 +525,7 @@ function AdminPanel() {
   function updateGenerationTime(index: number, value: string) {
     if (!settings) return;
     const nextTimes = [...(settings.generationTimes?.length ? settings.generationTimes : [settings.generationTime || '08:00'])];
-    nextTimes[index] = value;
+    nextTimes[index] = normalizeTimeValue(value);
     setSettings({ ...settings, generationTimes: nextTimes, generationTime: nextTimes[0], generationCount: nextTimes.length });
   }
 
@@ -583,10 +609,7 @@ function AdminPanel() {
             <span className="field-title">Generation times</span>
             <div className="time-grid">
               {(settings.generationTimes?.length ? settings.generationTimes : [settings.generationTime || '08:00']).slice(0, settings.generationCount || 1).map((time, index) => (
-                <label key={`${index}-${time}`}>
-                  <span>Run {index + 1}</span>
-                  <input type="time" value={time} onChange={(event) => updateGenerationTime(index, event.target.value)} />
-                </label>
+                <TimePicker key={index} label={`Run ${index + 1}`} value={time} onChange={(value) => updateGenerationTime(index, value)} />
               ))}
             </div>
           </div>

@@ -228,6 +228,12 @@ a { color: inherit; text-decoration: none; }
 .admin-list small { display: block; color: var(--muted); overflow-wrap: anywhere; }
 .settings-panel { margin-top: 18px; }
 .settings-row, .time-grid, .weekday-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.time-field { min-width: 0; }
+.time-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: #090e15; padding: 6px 10px; }
+.time-picker:focus-within { border-color: rgba(19, 217, 90, 0.75); box-shadow: 0 0 0 3px rgba(19, 217, 90, 0.15); }
+.time-picker select { min-height: 34px; border: 0; border-radius: 8px; background: transparent; padding: 0 4px; font-size: 1rem; font-weight: 800; text-align: center; }
+.time-picker select:focus { box-shadow: none; }
+.time-separator { color: var(--muted); font-weight: 900; }
 .weekday-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .weekday-option, .checkbox { display: flex !important; align-items: center; gap: 8px; }
 .weekday-option input, .checkbox input { width: auto; }
