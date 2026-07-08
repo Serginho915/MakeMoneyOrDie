@@ -64,6 +64,7 @@ export async function ensureSchema() {
       tags text[] NOT NULL DEFAULT '{}',
       seo_title text,
       seo_description text,
+      cover_image text,
       source text NOT NULL DEFAULT 'admin',
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
@@ -90,6 +91,8 @@ export async function ensureSchema() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+
+  await query(`ALTER TABLE generated_posts ADD COLUMN IF NOT EXISTS cover_image text`);
 
   const count = await query<{ count: string }>('SELECT count(*) FROM generated_posts');
   if (Number(count.rows[0]?.count || 0) === 0) {

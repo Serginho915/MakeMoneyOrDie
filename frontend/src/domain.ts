@@ -9,6 +9,7 @@ export type Post = {
   tags: string[];
   seoTitle: string | null;
   seoDescription: string | null;
+  coverImage: string | null;
   source: 'admin' | 'ai' | 'legacy';
   createdAt: string;
   updatedAt: string;

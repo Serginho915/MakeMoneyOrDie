@@ -31,6 +31,8 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
+    volumes:
+      - makemoneyordie_prod_uploads:/app/uploads
     env_file:
       - path: backend/.env.production
         required: false
@@ -62,3 +64,4 @@ services:
 
 volumes:
   makemoneyordie_prod_postgres_data:
+  makemoneyordie_prod_uploads:

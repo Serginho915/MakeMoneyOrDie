@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Clock, Eye, FilePlus, Menu, RefreshCw, Save, Search, Trash2, Wand2, X } from 'lucide-react';
-import { getPost, getPosts, request, subscribe } from './api';
+import { assetUrl, getPost, getPosts, request, subscribe } from './api';
 import type { AdminSettings, Article, Post } from './domain';
 
 const covers = ['/covers/cover1.png', '/covers/cover2.png', '/covers/cover3.png', '/covers/cover4.png'];
@@ -24,9 +24,17 @@ type DraftPost = {
   contentHtml: string;
   status: 'draft' | 'published';
   tags: string;
+  coverImage: string;
 };
 
-const emptyDraft: DraftPost = { title: '', slug: '', excerpt: '', contentHtml: '<h2>Introduction</h2><p></p>', status: 'published', tags: '' };
+type MediaAsset = {
+  name: string;
+  url: string;
+  size: number;
+  createdAt: string;
+};
+
+const emptyDraft: DraftPost = { title: '', slug: '', excerpt: '', contentHtml: '<h2>Introduction</h2><p></p>', status: 'published', tags: '', coverImage: '' };
 
 function normalizeTimeValue(value: string) {
   const trimmed = String(value || '').trim();
@@ -64,7 +72,7 @@ function toArticle(post: Post, index = 0): Article {
   const tag = post.tags[0] || (post.source === 'ai' ? 'AI Side Hustles' : 'Online Income');
   return {
     ...post,
-    cover: pickCover(post.slug || post.title),
+    cover: post.coverImage ? assetUrl(post.coverImage) : pickCover(post.slug || post.title),
     category: tag.replace(/\b\w/g, (letter) => letter.toUpperCase()),
     readingTime: Math.max(5, Math.ceil(post.contentHtml.replace(/<[^>]+>/g, '').split(/\s+/).length / 180)),
     views: 2400 + index * 420,
@@ -410,6 +418,7 @@ function AdminPanel() {
   const [token, setToken] = useState('');
   const [csrfToken, setCsrfToken] = useState('');
   const [posts, setPosts] = useState<Post[]>([]);
+  const [coverImages, setCoverImages] = useState<MediaAsset[]>([]);
   const [settings, setSettings] = useState<AdminSettings | null>(null);
   const [draft, setDraft] = useState(emptyDraft);
   const [editingSlug, setEditingSlug] = useState('');
@@ -436,12 +445,14 @@ function AdminPanel() {
   }, [token]);
 
   async function load(nextToken = token) {
-    const [loadedPosts, loadedSettings] = await Promise.all([
+    const [loadedPosts, loadedSettings, loadedCoverImages] = await Promise.all([
       request<Post[]>('/api/admin/posts', {}, nextToken),
       request<AdminSettings>('/api/admin/settings', {}, nextToken),
+      request<MediaAsset[]>('/api/admin/media/covers', {}, nextToken),
     ]);
     setPosts(loadedPosts);
     setSettings(loadedSettings);
+    setCoverImages(loadedCoverImages);
   }
 
   async function signIn(event: React.FormEvent) {
@@ -467,7 +478,11 @@ function AdminPanel() {
     event.preventDefault();
     setBusy(true);
     try {
-      const body = { ...draft, tags: draft.tags.split(',').map((tag) => tag.trim()).filter(Boolean) };
+      const body = {
+        ...draft,
+        coverImage: draft.coverImage || null,
+        tags: draft.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+      };
       await request<Post>(editingSlug ? `/api/admin/posts/${editingSlug}` : '/api/admin/posts', {
         method: editingSlug ? 'PUT' : 'POST',
         body: JSON.stringify(body),
@@ -485,6 +500,43 @@ function AdminPanel() {
 
   async function removePost(slug: string) {
     await request(`/api/admin/posts/${slug}`, { method: 'DELETE' }, token);
+    await load();
+  }
+
+  function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Could not read image file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadCoverImage(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setBusy(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const asset = await request<MediaAsset>('/api/admin/media/covers', {
+        method: 'POST',
+        body: JSON.stringify({ fileName: file.name, dataUrl }),
+      }, token);
+      await load();
+      setDraft((current) => ({ ...current, coverImage: current.coverImage || asset.url }));
+      setMessage('Cover image uploaded.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not upload image.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeCoverImage(name: string) {
+    await request(`/api/admin/media/covers/${encodeURIComponent(name)}`, { method: 'DELETE' }, token);
+    setDraft((current) => current.coverImage.endsWith(`/${name}`) ? { ...current, coverImage: '' } : current);
     await load();
   }
 
@@ -584,6 +636,13 @@ function AdminPanel() {
           <label><span>Slug</span><input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} /></label>
           <label><span>Excerpt</span><textarea value={draft.excerpt} onChange={(event) => setDraft({ ...draft, excerpt: event.target.value })} required /></label>
           <label><span>HTML content</span><textarea rows={10} value={draft.contentHtml} onChange={(event) => setDraft({ ...draft, contentHtml: event.target.value })} required /></label>
+          <label>
+            <span>Cover image</span>
+            <select value={draft.coverImage} onChange={(event) => setDraft({ ...draft, coverImage: event.target.value })}>
+              <option value="">Auto / default cover</option>
+              {coverImages.map((asset) => <option key={asset.name} value={asset.url}>{asset.name}</option>)}
+            </select>
+          </label>
           <label><span>Tags</span><input value={draft.tags} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} placeholder="affiliate marketing, AI side hustles" /></label>
           <button disabled={busy}><Save size={16} /> Save article</button>
         </form>
@@ -598,13 +657,38 @@ function AdminPanel() {
                 <div><strong>{post.title}</strong><small>{post.slug}</small></div>
                 <button onClick={() => {
                   setEditingSlug(post.slug);
-                  setDraft({ title: post.title, slug: post.slug, excerpt: post.excerpt, contentHtml: post.contentHtml, status: post.status, tags: post.tags.join(', ') });
+                  setDraft({ title: post.title, slug: post.slug, excerpt: post.excerpt, contentHtml: post.contentHtml, status: post.status, tags: post.tags.join(', '), coverImage: post.coverImage || '' });
                 }}><FilePlus size={16} /> Edit</button>
                 <button onClick={() => removePost(post.slug)}><Trash2 size={16} /> Delete</button>
               </article>
             ))}
           </div>
         </section>
+      </section>
+      <section className="settings-panel media-panel">
+        <div className="media-panel-head">
+          <div>
+            <h2>Cover images</h2>
+            <p>Uploaded images are used randomly for newly generated articles.</p>
+          </div>
+          <label className="upload-button">
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={uploadCoverImage} disabled={busy} />
+            <FilePlus size={16} /> Upload image
+          </label>
+        </div>
+        <div className="media-grid">
+          {coverImages.map((asset) => (
+            <article key={asset.name} className="media-card">
+              <img src={assetUrl(asset.url)} alt="" />
+              <div>
+                <strong>{asset.name}</strong>
+                <small>{Math.max(1, Math.round(asset.size / 1024))} KB</small>
+              </div>
+              <button onClick={() => removeCoverImage(asset.name)} disabled={busy}><Trash2 size={16} /> Delete</button>
+            </article>
+          ))}
+          {!coverImages.length && <p className="empty-note">No uploaded cover images yet.</p>}
+        </div>
       </section>
       {settings && (
         <section className="settings-panel">

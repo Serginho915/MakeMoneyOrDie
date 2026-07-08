@@ -18,6 +18,7 @@ export interface PostInput {
   tags?: string[];
   seoTitle?: string;
   seoDescription?: string;
+  coverImage?: string | null;
 }
 
 export interface Post extends Required<Omit<PostInput, 'slug' | 'status' | 'author' | 'tags' | 'seoTitle' | 'seoDescription'>> {
@@ -28,6 +29,7 @@ export interface Post extends Required<Omit<PostInput, 'slug' | 'status' | 'auth
   tags: string[];
   seoTitle: string | null;
   seoDescription: string | null;
+  coverImage: string | null;
   source: 'admin' | 'ai' | 'legacy';
   createdAt: string;
   updatedAt: string;

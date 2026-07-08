@@ -35,6 +35,8 @@ services:
       target: dev
     ports:
       - "4000:4000"
+    volumes:
+      - makemoneyordie_uploads:/app/uploads
     env_file:
       - path: backend/.env
         required: false
@@ -94,3 +96,4 @@ services:
 
 volumes:
   makemoneyordie_postgres_data:
+  makemoneyordie_uploads:
